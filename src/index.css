@@ -2,91 +2,113 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom Scrollbar Styling - Only for desktop */
-@media (min-width: 1024px) {
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: #0a0d14;
+  color: #e6e9f0;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle radial gradient background */
+.app-bg {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
+    radial-gradient(1000px 500px at 110% 0%, rgba(168, 85, 247, 0.07), transparent 60%),
+    radial-gradient(800px 400px at 50% 120%, rgba(16, 185, 129, 0.05), transparent 60%),
+    #0a0d14;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-sm;
   }
 
-  ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+  .card-strong {
+    @apply rounded-xl border border-white/15 bg-[#0f1320]/95 shadow-2xl;
   }
 
-  ::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #06b6d4, #3b82f6);
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition
+           disabled:opacity-50 disabled:cursor-not-allowed select-none;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #0891b2, #2563eb);
+  .btn-primary {
+    @apply btn bg-sky-500 text-white hover:bg-sky-400 active:bg-sky-600;
   }
 
-  ::-webkit-scrollbar-corner {
-    background: rgba(255, 255, 255, 0.1);
+  .btn-success {
+    @apply btn bg-emerald-500 text-white hover:bg-emerald-400;
   }
 
-  /* Firefox scrollbar styling */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: #06b6d4 rgba(255, 255, 255, 0.1);
+  .btn-warning {
+    @apply btn bg-amber-500 text-white hover:bg-amber-400;
+  }
+
+  .btn-danger {
+    @apply btn bg-rose-500 text-white hover:bg-rose-400;
+  }
+
+  .btn-ghost {
+    @apply btn bg-white/5 text-white/90 hover:bg-white/10 border border-white/10;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm
+           text-white placeholder-white/40 outline-none transition
+           focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20;
+  }
+
+  /* Native select dropdown styling (Chrome/Edge respect bg on options) */
+  select.input option,
+  select option {
+    background-color: #0f1320;
+    color: #e6e9f0;
+  }
+
+  .label {
+    @apply text-xs font-medium uppercase tracking-wider text-white/60;
+  }
+
+  .stat-tile {
+    @apply card p-4 flex flex-col gap-1;
+  }
+  .stat-value {
+    @apply text-2xl font-semibold tabular-nums;
+  }
+  .stat-label {
+    @apply text-xs uppercase tracking-wider text-white/60;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide;
   }
 }
 
-/* Mobile optimizations */
-@media (max-width: 1023px) {
-  /* Use native scrollbars on mobile for better touch experience */
-  * {
-    scrollbar-width: auto;
-    scrollbar-color: initial;
-  }
-  
-  ::-webkit-scrollbar {
-    width: auto;
-    height: auto;
-  }
-  
-  ::-webkit-scrollbar-track {
-    background: initial;
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    background: initial;
-    border-radius: initial;
-    border: initial;
-  }
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
-
-/* Smooth animations */
-@layer base {
-  * {
-    @apply transition-colors duration-200;
-  }
+::-webkit-scrollbar-track {
+  background: transparent;
 }
-
-/* Focus styles for accessibility */
-@layer base {
-  button:focus-visible,
-  input:focus-visible,
-  select:focus-visible {
-    @apply outline-none ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-900;
-  }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
 }
-
-/* Loading animation */
-@keyframes pulse-glow {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(1.05);
-  }
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }

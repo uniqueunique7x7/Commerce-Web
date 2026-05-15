@@ -1,26 +1,38 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "paypal-commerce-scanner",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Server-side bulk domain analyzer for PayPal Commerce.",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -k -n server,web -c green,cyan \"npm:server\" \"vite\"",
+    "server": "node server/index.js",
     "build": "vite build",
+    "start": "node server/index.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "https-proxy-agent": "^9.0.0",
     "lucide-react": "^0.344.0",
+    "multer": "^1.4.5-lts.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "socks-proxy-agent": "^10.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@types/node": "^25.8.0",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.18",
+    "concurrently": "^8.2.2",
     "eslint": "^9.9.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.11",

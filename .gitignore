@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Runtime data
+jobs/
+uploads/
+*.tsbuildinfo
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -23,3 +28,4 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.bolt/
