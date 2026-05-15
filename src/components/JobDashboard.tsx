@@ -160,11 +160,10 @@ export function JobDashboard({ job: initialJob, onClose }: Props) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat icon={<Activity className="h-4 w-4 text-sky-300" />} label="Progress" value={`${progress.toFixed(1)}%`} />
         <Stat icon={<CheckCircle2 className="h-4 w-4 text-emerald-300" />} label="Completed" value={`${stats.completed.toLocaleString()} / ${stats.total.toLocaleString()}`} />
         <Stat icon={<ShieldCheck className="h-4 w-4 text-fuchsia-300" />} label="PayPal hits" value={stats.paypal.toLocaleString()} accent="fuchsia" />
-        <Stat icon={<ShieldCheck className="h-4 w-4 text-amber-300" />} label="Captcha hits" value={stats.captcha.toLocaleString()} />
         <Stat icon={<AlertCircle className="h-4 w-4 text-rose-300" />} label="Errors" value={stats.errors.toLocaleString()} />
         <Stat icon={<Activity className="h-4 w-4 text-cyan-300" />} label="Rate" value={`${rate.toFixed(1)}/s`} sub={eta > 0 ? `ETA ${formatDuration(eta)}` : undefined} />
       </div>
@@ -377,7 +376,14 @@ function ResultRow({ r }: { r: DomainResult }) {
       <td className="px-4 py-2.5">
         <div className="flex gap-1">
           {r.paypal && <span className="badge bg-fuchsia-500/20 text-fuchsia-200">PAYPAL</span>}
-          {r.captcha && <span className="badge bg-amber-500/20 text-amber-200">CAPTCHA</span>}
+          {r.captcha && (
+            <span
+              className="badge bg-amber-500/20 text-amber-200"
+              title={`Captcha detected: ${r.captcha}`}
+            >
+              {r.captcha.toUpperCase()}
+            </span>
+          )}
           {!r.paypal && !r.captcha && !r.error && <span className="text-xs text-white/30">—</span>}
         </div>
       </td>

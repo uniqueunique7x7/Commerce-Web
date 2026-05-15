@@ -342,7 +342,12 @@ export class JobManager {
       }
       if (!matches(r)) continue;
       if (q && !r.domain.toLowerCase().includes(q)) continue;
-      res.write(isJson ? line + '\n' : r.domain + '\n');
+      if (isJson) {
+        res.write(line + '\n');
+      } else {
+        // Prefer the post-redirect final URL; fall back to the original domain.
+        res.write((r.finalUrl || r.domain) + '\n');
+      }
     }
     res.end();
   }

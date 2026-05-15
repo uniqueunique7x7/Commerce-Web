@@ -26,7 +26,8 @@ export interface DomainResult {
   ok: boolean;
   status?: number;
   paypal?: boolean;
-  captcha?: boolean;
+  /** Captcha vendor name (e.g. "reCAPTCHA", "hCaptcha") or null/undefined when none detected. */
+  captcha?: string | null;
   finalUrl?: string;
   error?: string;
   ms: number;

@@ -9,16 +9,23 @@ const PAYPAL_PATTERNS = [
   /data-client-token/i,
 ];
 
+// Ordered: most specific first so generic /captcha/ is the last fallback.
 const CAPTCHA_PATTERNS = [
-  /g-recaptcha/i,
-  /recaptcha/i,
-  /hcaptcha/i,
-  /turnstile/i,
-  /cf-challenge/i,
-  /funcaptcha/i,
-  /geetest/i,
-  /captcha/i,
+  { name: 'reCAPTCHA',            regex: /g-recaptcha|www\.google\.com\/recaptcha|recaptcha\/api\.js|grecaptcha/i },
+  { name: 'hCaptcha',             regex: /hcaptcha\.com|h-captcha/i },
+  { name: 'Cloudflare Turnstile', regex: /challenges\.cloudflare\.com\/turnstile|cf-turnstile/i },
+  { name: 'Cloudflare Challenge', regex: /cf-challenge|__cf_chl_|cdn-cgi\/challenge-platform/i },
+  { name: 'FunCaptcha',           regex: /funcaptcha|arkoselabs/i },
+  { name: 'GeeTest',              regex: /geetest/i },
+  { name: 'Captcha',              regex: /captcha/i },
 ];
+
+function detectCaptcha(body) {
+  for (const p of CAPTCHA_PATTERNS) {
+    if (p.regex.test(body)) return p.name;
+  }
+  return null;
+}
 
 // Reusable keep-alive agents — critical for performance at scale.
 const httpsAgent = new https.Agent({
@@ -233,7 +240,7 @@ export async function checkDomain(rawDomain, timeoutMs = 15000, proxyInfo = null
       ok: status >= 200 && status < 400,
       status,
       paypal: PAYPAL_PATTERNS.some((p) => p.test(body)),
-      captcha: CAPTCHA_PATTERNS.some((p) => p.test(body)),
+      captcha: detectCaptcha(body),
       finalUrl,
       ms: Date.now() - started,
     };
@@ -245,7 +252,7 @@ export async function checkDomain(rawDomain, timeoutMs = 15000, proxyInfo = null
         ok: status >= 200 && status < 400,
         status,
         paypal: PAYPAL_PATTERNS.some((p) => p.test(body)),
-        captcha: CAPTCHA_PATTERNS.some((p) => p.test(body)),
+        captcha: detectCaptcha(body),
         finalUrl,
         ms: Date.now() - started,
       };
