@@ -7,31 +7,12 @@ import { checkDomain, parseProxy } from './checker.js';
 const JOBS_DIR = path.resolve('jobs');
 if (!fs.existsSync(JOBS_DIR)) fs.mkdirSync(JOBS_DIR, { recursive: true });
 
+// Pagination index: remember the byte offset of every Nth result row so we can
+// seek directly into the .jsonl file instead of re-scanning from the start.
+const INDEX_STRIDE = 1000;
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-/** Tiny p-limit replacement. */
-function makeLimiter(max) {
-  let active = 0;
-  const queue = [];
-  const tryNext = () => {
-    if (active >= max || queue.length === 0) return;
-    active++;
-    const { fn, resolve, reject } = queue.shift();
-    Promise.resolve()
-      .then(fn)
-      .then(resolve, reject)
-      .finally(() => {
-        active--;
-        tryNext();
-      });
-  };
-  return (fn) =>
-    new Promise((resolve, reject) => {
-      queue.push({ fn, resolve, reject });
-      tryNext();
-    });
 }
 
 export class Job extends EventEmitter {
@@ -82,6 +63,12 @@ export class Job extends EventEmitter {
     this.resultsPath = path.join(JOBS_DIR, `${id}.jsonl`);
     this.writeStream = fs.createWriteStream(this.resultsPath, { flags: 'w' });
     this._lastStatsEmit = 0;
+
+    // Offset index: offsetIndex[k] = byte position where row (k * INDEX_STRIDE) begins.
+    // Row 0 always starts at byte 0.
+    this._offsetIndex = [0];
+    this._bytesWritten = 0;
+    this._rowsWritten = 0;
   }
 
   toInfo() {
@@ -147,61 +134,74 @@ export class Job extends EventEmitter {
   }
 
   async _process() {
-    const limit = makeLimiter(this.concurrency);
-    const tasks = [];
-
     const rl = readline.createInterface({
       input: fs.createReadStream(this.inputPath),
       crlfDelay: Infinity,
     });
+    const iterator = rl[Symbol.asyncIterator]();
 
-    for await (const rawLine of rl) {
-      if (this.stopped) break;
-      const line = rawLine.trim();
-      if (!line) continue;
+    // Pull-based worker pool: N workers each pull the next line from the
+    // shared async iterator and process it. This keeps memory flat
+    // regardless of input size (no pre-queueing of 300k+ tasks).
+    const runWorker = async () => {
+      while (!this.stopped) {
+        // Honor pause without busy-spinning the CPU
+        while (this.paused && !this.stopped) await sleep(150);
+        if (this.stopped) break;
 
-      tasks.push(
-        limit(async () => {
-          // Honor pause: wait without consuming the slot too aggressively
-          while (this.paused && !this.stopped) await sleep(150);
-          if (this.stopped) return;
+        const { value, done } = await iterator.next();
+        if (done) break;
+        const line = value && value.trim();
+        if (!line) continue;
 
-          let result;
-          try {
-            result = await checkDomain(line, this.timeout, this._pickProxy());
-          } catch (e) {
-            result = {
-              domain: line,
-              ok: false,
-              error: (e && e.message) || 'Unknown error',
-              ms: 0,
-            };
-          }
+        let result;
+        try {
+          result = await checkDomain(line, this.timeout, this._pickProxy());
+        } catch (e) {
+          result = {
+            domain: line,
+            ok: false,
+            error: (e && e.message) || 'Unknown error',
+            ms: 0,
+          };
+        }
 
-          // Persist
-          this.writeStream.write(JSON.stringify(result) + '\n');
+        // Persist
+        const line2 = JSON.stringify(result) + '\n';
+        this.writeStream.write(line2);
 
-          // Stats
-          this.stats.completed++;
-          if (result.error) this.stats.errors++;
-          if (result.ok) this.stats.ok++;
-          if (result.paypal) this.stats.paypal++;
-          if (result.captcha) this.stats.captcha++;
+        // Maintain the offset index. Safe across workers: everything between
+        // the await above and here is synchronous on a single thread.
+        this._bytesWritten += Buffer.byteLength(line2, 'utf8');
+        this._rowsWritten++;
+        if (this._rowsWritten % INDEX_STRIDE === 0) {
+          this._offsetIndex.push(this._bytesWritten);
+        }
 
-          // Emit interesting results in real time (paypal hits)
-          if (result.paypal) this.emit('hit', result);
+        // Stats
+        this.stats.completed++;
+        if (result.error) this.stats.errors++;
+        if (result.ok) this.stats.ok++;
+        if (result.paypal) this.stats.paypal++;
+        if (result.captcha) this.stats.captcha++;
 
-          // Throttled stats
-          const now = Date.now();
-          if (now - this._lastStatsEmit > 250) {
-            this._lastStatsEmit = now;
-            this._emitStats();
-          }
-        }),
-      );
-    }
+        if (result.paypal) this.emit('hit', result);
 
-    await Promise.allSettled(tasks);
+        // Throttled stats
+        const now = Date.now();
+        if (now - this._lastStatsEmit > 250) {
+          this._lastStatsEmit = now;
+          this._emitStats();
+        }
+      }
+    };
+
+    const workers = [];
+    for (let i = 0; i < this.concurrency; i++) workers.push(runWorker());
+    await Promise.allSettled(workers);
+
+    // Drain readline if we stopped early
+    try { rl.close(); } catch { /* ignore */ }
   }
 
   _emitStats(force = false) {
@@ -278,6 +278,9 @@ export class JobManager {
   /**
    * Stream results from disk, applying a filter, with pagination.
    * Returns { rows, total } where total is the number of rows matching the filter.
+   *
+   * Fast path: when filter='all' and no search, we use the offset index to seek
+   * directly to the requested page instead of scanning the whole file.
    */
   async getResults(id, { page = 0, pageSize = 100, filter = 'all', search = '' } = {}) {
     const job = this.jobs.get(id);
@@ -285,6 +288,42 @@ export class JobManager {
 
     const matches = filterFn(filter);
     const q = (search || '').trim().toLowerCase();
+
+    // ---- Fast path: random-access via offset index ----
+    if (filter === 'all' && !q) {
+      const targetRow = page * pageSize;
+      const idx = job._offsetIndex;
+      const k = Math.min(Math.floor(targetRow / INDEX_STRIDE), idx.length - 1);
+      const startByte = idx[k];
+      let toSkip = targetRow - k * INDEX_STRIDE;
+      const rows = [];
+      let needed = pageSize;
+
+      const rl = readline.createInterface({
+        input: fs.createReadStream(job.resultsPath, { start: startByte }),
+        crlfDelay: Infinity,
+      });
+      for await (const line of rl) {
+        if (!line) continue;
+        if (toSkip > 0) { toSkip--; continue; }
+        try { rows.push(JSON.parse(line)); } catch { continue; }
+        if (--needed === 0) break;
+      }
+      rl.close();
+      return { rows, total: job.stats.completed };
+    }
+
+    // ---- Cheap totals for single-flag filters when there's no search ----
+    // (Pagination through filtered rows still scans, but the total comes free.)
+    let knownTotal = null;
+    if (!q) {
+      if (filter === 'paypal') knownTotal = job.stats.paypal;
+      else if (filter === 'captcha') knownTotal = job.stats.captcha;
+      else if (filter === 'errors') knownTotal = job.stats.errors;
+      else if (filter === 'ok') knownTotal = job.stats.ok;
+    }
+
+    // ---- Fallback: full scan for complex filters / search ----
     const rows = [];
     let total = 0;
     const start = page * pageSize;
@@ -307,9 +346,13 @@ export class JobManager {
       if (q && !r.domain.toLowerCase().includes(q)) continue;
       if (total >= start && total < end) rows.push(r);
       total++;
+      // Early exit when we have the page AND we already know the total.
+      if (knownTotal !== null && rows.length === pageSize && total >= end) {
+        return { rows, total: knownTotal };
+      }
     }
 
-    return { rows, total };
+    return { rows, total: knownTotal !== null ? knownTotal : total };
   }
 
   async streamExport(id, filter, search, format, res) {
